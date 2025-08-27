@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Kuis Analitika Data – Minggu 2</title>
+<style>
+  :root{--ink:#111;--muted:#666;--ok:#2aa866;--bad:#d43d3d;--box:#222;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif;color:var(--ink);background:#fff}
+  header{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #eee}
+  .left, .right{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  input[type=text]{padding:.55rem .7rem;border:2px solid var(--box);border-radius:10px;font-weight:600;min-width:200px}
+  button{padding:.6rem .9rem;border:2px solid var(--box);border-radius:12px;background:#eee;font-weight:700;cursor:pointer}
+  .wrap{max-width:900px;margin:0 auto;padding:14px}
+  h1{font-size:22px;margin:8px 0}
+  .pill{font-size:12px;padding:4px 8px;border:1px solid #ddd;border-radius:999px;background:#fafafa}
+  .card{border:2px solid var(--box);border-radius:12px;padding:14px;margin:14px 0}
+  .qhead{display:flex;justify-content:space-between;gap:8px;margin-bottom:10px}
+  .qtext{font-weight:700}
+  .opts{display:grid;gap:8px}
+  .opt{border:1.5px solid #ccc;border-radius:10px;padding:10px;display:flex;gap:10px;align-items:flex-start}
+  .opt input{margin-top:3px;transform:scale(1.2)}
+  .nav{display:flex;justify-content:space-between;gap:10px;margin-top:10px}
+  .result{font-weight:800;margin:12px 0}
+  .good{color:var(--ok)} .bad{color:var(--bad)}
+
+  /* Modal Leaderboard */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
+  .modal .box{background:#fff;border:2px solid var(--box);border-radius:14px;max-width:560px;width:100%;padding:16px}
+  table{width:100%;border-collapse:collapse}
+  th,td{border:1px solid #ddd;padding:8px 10px;text-align:left}
+  th{background:#fafafa}
+  .err{color:var(--bad);font-weight:700}
+</style>
+</head>
+<body>
+<header>
+  <div class="left">
+    <input id="name" type="text" placeholder="Nama pemain…" maxlength="40"/>
+    <span class="pill" id="timer">00:00</span>
+    <span class="pill" id="progress">Belum mulai</span>
+  </div>
+  <div class="right">
+    <button id="start">Mulai</button>
+    <button id="reset" disabled>Reset</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <h1>Kuis Analitika Data – Minggu 2 (10 Soal)</h1>
+  <div id="quizArea"></div>
+  <div class="nav" id="navBtns" style="display:none">
+    <button id="prev">◀ Sebelumnya</button>
+    <button id="next">Berikutnya ▶</button>
+    <button id="submit" style="margin-left:auto;background:#e9f6ea;border-color:#7dbc7d">Kumpulkan Jawaban</button>
+  </div>
+  <div id="summary"></div>
+</div>
+
+<!-- Leaderboard Modal -->
+<div class="modal" id="lbModal" role="dialog" aria-modal="true" aria-labelledby="lbTitle">
+  <div class="box">
+    <h3 id="lbTitle">Leaderboard (Score & Waktu)</h3>
+    <div id="lbYour" style="margin-bottom:6px;font-weight:700"></div>
+    <div id="lbErr" class="err" style="display:none"></div>
+    <table>
+      <thead><tr><th>#</th><th>Nama</th><th>Score</th><th>Waktu (detik)</th></tr></thead>
+      <tbody id="lbBody"></tbody>
+    </table>
+    <div style="display:flex;justify-content:flex-end;margin-top:10px">
+      <button id="lbClose">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
+/* ====== GANTI DENGAN PUNYAMU ====== */
+const SUPABASE_URL = "https://YOUR-PROJECT-ref.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR-ANON-KEY";
+/* ================================== */
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+/* ====== Soal Kuis (berdasarkan materi Minggu 2) ====== */
+const QUESTIONS = [
+  {
+    q: "Urutan proses analisis data yang benar adalah…",
+    opts: [
+      "Ask → Get Data → Clean → Analyze → Share → Act", // A (benar)
+      "Get Data → Analyze → Ask → Clean → Share → Act",
+      "Ask → Clean → Get Data → Analyze → Act → Share",
+      "Get Data → Ask → Clean → Share → Analyze → Act",
+      "Ask → Analyze → Clean → Get Data → Share → Act"
+    ],
+    a: 0
+  },
+  {
+    q: "Pengumpulan data adalah…",
+    opts: [
+      "Proses menghapus data yang tidak relevan",
+      "Proses menghimpun fakta mentah yang relevan untuk keputusan", // B
+      "Proses memvisualisasikan hasil",
+      "Proses mengintegrasikan beberapa dashboard",
+      "Proses mengekspor data menjadi laporan"
+    ],
+    a: 1
+  },
+  {
+    q: "Manakah yang termasuk data primer?",
+    opts: [
+      "Dataset publik BPS",
+      "Artikel jurnal",
+      "Observasi lapangan / survei responden", // C
+      "Laporan tahunan perusahaan",
+      "World Bank Open Data"
+    ],
+    a: 2
+  },
+  {
+    q: "Contoh data time series adalah…",
+    opts: [
+      "Daftar pelanggan pada Mei 2004 (snapshot)",
+      "Nilai tukar USD/IDR 2016–2020 (berkala)", // B
+      "Profil pelanggan pada 1 Januari 2022",
+      "Survei kepuasan pada satu hari",
+      "Daftar produk per 31 Desember 2023"
+    ],
+    a: 1
+  },
+  {
+    q: "Skala suhu Celsius termasuk tipe data…",
+    opts: [
+      "Nominal",
+      "Ordinal",
+      "Interval", // C
+      "Rasio",
+      "Biner"
+    ],
+    a: 2
+  },
+  {
+    q: "Responden sengaja tidak mengisi kolom pendapatan termasuk jenis missing data…",
+    opts: [
+      "MCAR (Missing Completely At Random)",
+      "MAR (Missing At Random)", // B
+      "MNAR (Missing Not At Random)",
+      "MNCR (Missing Not Completely Random)",
+      "MCR (Missing Conditional Random)"
+    ],
+    a: 1
+  },
+  {
+    q: "Untuk data kategorikal yang hilang, teknik imputasi yang umum adalah…",
+    opts: [
+      "Imputasi mean",
+      "Imputasi median",
+      "Imputasi kategori ter-sering (modus)", // C
+      "Imputasi end-of-tail",
+      "Imputasi decimal scaling"
+    ],
+    a: 2
+  },
+  {
+    q: "Z-score normalization mengubah nilai berdasarkan…",
+    opts: [
+      "Rentang minimum–maksimum",
+      "Mean dan standar deviasi", // B
+      "Pembulatan ke bilangan bulat",
+      "Pembagian dengan 10^j (decimal scaling)",
+      "Log transform"
+    ],
+    a: 1
+  },
+  {
+    q: "PCA (Principal Component Analysis) termasuk…",
+    opts: [
+      "Feature selection",
+      "Dimensionality reduction: feature extraction", // B
+      "Numerosity reduction",
+      "Schema integration",
+      "Data discretization"
+    ],
+    a: 1
+  },
+  {
+    q: "Contoh penyimpanan data terstruktur adalah…",
+    opts: [
+      "Dokumen teks di cloud drive",
+      "Database SQL (mis. PostgreSQL)", // B
+      "Folder gambar",
+      "Video di object storage",
+      "Catatan kertas arsip manual"
+    ],
+    a: 1
+  }
+];
+
+/* ====== Elemen UI ====== */
+const nameInput = document.getElementById("name");
+const quizArea = document.getElementById("quizArea");
+const navBtns = document.getElementById("navBtns");
+const btnPrev = document.getElementById("prev");
+const btnNext = document.getElementById("next");
+const btnSubmit = document.getElementById("submit");
+const btnStart = document.getElementById("start");
+const btnReset = document.getElementById("reset");
+const timerEl = document.getElementById("timer");
+const progressEl = document.getElementById("progress");
+const summaryEl = document.getElementById("summary");
+
+/* Leaderboard modal */
+const lbModal = document.getElementById("lbModal");
+const lbBody = document.getElementById("lbBody");
+const lbYour = document.getElementById("lbYour");
+const lbErr = document.getElementById("lbErr");
+const lbClose = document.getElementById("lbClose");
+
+/* ====== State ====== */
+let idx = 0;
+let answers = Array(QUESTIONS.length).fill(null);
+let startedAt = null, timerId = null;
+
+/* ====== Utils ====== */
+function fmtTime(ms){
+  const s = Math.floor(ms/1000), m = Math.floor(s/60), r = s%60;
+  return `${String(m).padStart(2,"0")}:${String(r).padStart(2,"0")}`;
+}
+function startTimer(){
+  startedAt = Date.now();
+  timerId = setInterval(()=> timerEl.textContent = fmtTime(Date.now()-startedAt), 250);
+}
+function stopTimer(){ if(timerId){ clearInterval(timerId); timerId=null; } }
+
+function renderQuestion(i){
+  const q = QUESTIONS[i];
+  quizArea.innerHTML = `
+    <div class="card">
+      <div class="qhead">
+        <div class="qtext">(${i+1}/${QUESTIONS.length}) ${q.q}</div>
+      </div>
+      <div class="opts">
+        ${q.opts.map((t,oi)=>`
+          <label class="opt">
+            <input type="radio" name="q${i}" value="${oi}" ${answers[i]===oi?'checked':''}/>
+            <div><b>${String.fromCharCode(65+oi)}.</b> ${t}</div>
+          </label>
+        `).join('')}
+      </div>
+    </div>
+  `;
+
+  // bind radios
+  quizArea.querySelectorAll(`input[name="q${i}"]`).forEach(r=>{
+    r.addEventListener('change',()=>{ answers[i]=parseInt(r.value,10); updateProgress(); });
+  });
+
+  btnPrev.disabled = (i===0);
+  btnNext.disabled = (i===QUESTIONS.length-1);
+  btnSubmit.style.display = (i===QUESTIONS.length-1) ? 'inline-block' : 'none';
+  updateProgress();
+}
+function updateProgress(){
+  const answered = answers.filter(v=>v!==null).length;
+  progressEl.textContent = `Terjawab ${answered}/${QUESTIONS.length}`;
+}
+
+/* ====== Leaderboard (best per nama: score tertinggi, waktu tercepat) ====== */
+async function saveAttempt(name, score, timeMs){
+  const clean = (name||"Anon").trim().slice(0,40);
+  const { error } = await supabase
+      .from("quiz_leaderboard")
+      .insert({ name: clean, score, time_ms: timeMs, total_q: QUESTIONS.length });
+  if(error) throw error;
+}
+async function fetchBestLeaderboard(limit=10){
+  // Ambil dari VIEW yang sudah melakukan "distinct on (name) order by score desc, time asc)"
+  const { data, error } = await supabase
+      .from("quiz_leaderboard_best")
+      .select("name,score,time_ms,created_at")
+      .order("score",{ascending:false})
+      .order("time_ms",{ascending:true})
+      .limit(limit);
+  if(error) throw error;
+  return data || [];
+}
+function openLeaderboard(yourScore, yourMs){
+  lbErr.style.display = "none";
+  lbYour.textContent = `Nilai kamu: ${yourScore}/${QUESTIONS.length} • Waktu: ${Math.round(yourMs/1000)} detik`;
+  lbBody.innerHTML = `<tr><td colspan="4">Memuat…</td></tr>`;
+  lbModal.style.display = "flex";
+
+  fetchBestLeaderboard(10).then(rows=>{
+    lbBody.innerHTML = "";
+    rows.forEach((r,i)=>{
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td>${i+1}</td><td>${r.name}</td><td>${r.score}</td><td>${Math.round(r.time_ms/1000)}</td>`;
+      lbBody.appendChild(tr);
+    });
+  }).catch(err=>{
+    lbErr.textContent = "Gagal memuat leaderboard: " + err.message;
+    lbErr.style.display = "block";
+  });
+}
+lbClose.addEventListener("click", ()=> lbModal.style.display = "none");
+
+/* ====== Actions ====== */
+btnStart.addEventListener("click", ()=>{
+  if(!nameInput.value.trim()){
+    nameInput.focus();
+    return;
+  }
+  btnStart.disabled = true;
+  btnReset.disabled = false;
+  navBtns.style.display = "flex";
+  answers = Array(QUESTIONS.length).fill(null);
+  idx = 0; summaryEl.innerHTML = "";
+  timerEl.textContent = "00:00";
+  startTimer();
+  renderQuestion(idx);
+});
+
+btnReset.addEventListener("click", ()=>{
+  stopTimer();
+  timerEl.textContent = "00:00";
+  progressEl.textContent = "Belum mulai";
+  navBtns.style.display = "none";
+  quizArea.innerHTML = "";
+  summaryEl.innerHTML = "";
+  btnStart.disabled = false;
+  btnReset.disabled = true;
+  answers = Array(QUESTIONS.length).fill(null);
+  idx = 0;
+});
+
+btnPrev.addEventListener("click", ()=>{ if(idx>0){ idx--; renderQuestion(idx); } });
+btnNext.addEventListener("click", ()=>{ if(idx<QUESTIONS.length-1){ idx++; renderQuestion(idx); } });
+
+btnSubmit.addEventListener("click", async ()=>{
+  const allAnswered = answers.every(v=>v!==null);
+  if(!allAnswered){
+    summaryEl.innerHTML = `<div class="result bad">Masih ada soal yang belum dijawab.</div>`;
+    return;
+  }
+  stopTimer();
+  const timeMs = Date.now() - startedAt;
+  let score = 0;
+  QUESTIONS.forEach((q,i)=>{ if(answers[i]===q.a) score++; });
+
+  summaryEl.innerHTML = `<div class="result ${score===QUESTIONS.length?'good':'bad'}">
+    Skor: <b>${score}/${QUESTIONS.length}</b> • Waktu: <b>${Math.round(timeMs/1000)} detik</b>
+  </div>`;
+
+  try{
+    await saveAttempt(nameInput.value, score, timeMs);
+  }catch(err){
+    console.warn("Gagal simpan attempt:", err.message);
+  }
+  openLeaderboard(score, timeMs);
+});
+</script>
+</body>
+</html>
